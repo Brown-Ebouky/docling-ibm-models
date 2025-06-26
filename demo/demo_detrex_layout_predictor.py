@@ -4,18 +4,17 @@
 #
 import argparse
 import logging
-import os
+
+# import os
 import sys
 import time
 from pathlib import Path
 
-import numpy as np
-import torch
-
-# from PIL import Image, ImageDraw, ImageFont
+from demo_layout_predictor import save_predictions
+from PIL import Image
 
 from docling_ibm_models.layoutmodel.detrex_layout_predictor import DetRexLayoutPredictor
-from demo.demo_layout_predictor import save_predictions
+
 
 def demo(
     logger: logging.Logger,
@@ -32,7 +31,9 @@ def demo(
     pdf_image = pyvips.Image.new_from_file("test_data/ADS.2007.page_123.pdf", page=0)
     """
     # Create the layout predictor
-    lpredictor = DetRexLayoutPredictor(artifact_path, device=device, num_threads=num_threads)
+    lpredictor = DetRexLayoutPredictor(artifact_path,
+                                       device=device,
+                                       num_threads=num_threads)
 
     # Predict all test png images
     t0 = time.perf_counter()
@@ -55,16 +56,14 @@ def demo(
                 break
     total_ms = 1000 * (time.perf_counter() - t0)
     avg_ms = (total_ms / img_counter) if img_counter > 0 else 0
-    logger.info(
-        "For {} images(ms): [total|avg] = [{:.1f}|{:.1f}]".format(
-            img_counter, total_ms, avg_ms
-        )
-    )
+    logger.info("For {} images(ms): [total|avg] = [{:.1f}|{:.1f}]".format(
+        img_counter, total_ms, avg_ms))
 
 
 def main(args):
     r""" """
-    num_threads = int(args.num_threads) if args.num_threads is not None else None
+    num_threads = int(
+        args.num_threads) if args.num_threads is not None else None
     device = args.device.lower()
     img_dir = args.img_dir
     viz_dir = args.viz_dir
@@ -76,15 +75,14 @@ def main(args):
     if not logger.hasHandlers():
         handler = logging.StreamHandler(sys.stdout)
         formatter = logging.Formatter(
-            "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
-        )
+            "%(asctime)s %(name)-12s %(levelname)-8s %(message)s")
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
     # Ensure the viz dir
     Path(viz_dir).mkdir(parents=True, exist_ok=True)
 
-    artifact_path = "bebouky/deterex-custom-model" # os.path.join(download_path, "model_artifacts/layout")
+    artifact_path = "bebouky/deterex-custom-model"  # os.path.join(download_path, "model_artifacts/layout")
 
     # Test the LayoutPredictor
     demo(logger, artifact_path, device, num_threads, img_dir, viz_dir)
@@ -95,12 +93,16 @@ if __name__ == "__main__":
     python -m demo.demo_layout_predictor -i <images_dir>
     """
     parser = argparse.ArgumentParser(description="Test the LayoutPredictor")
-    parser.add_argument(
-        "-d", "--device", required=False, default="cpu", help="One of [cpu, cuda, mps]"
-    )
-    parser.add_argument(
-        "-n", "--num_threads", required=False, default=4, help="Number of threads"
-    )
+    parser.add_argument("-d",
+                        "--device",
+                        required=False,
+                        default="cpu",
+                        help="One of [cpu, cuda, mps]")
+    parser.add_argument("-n",
+                        "--num_threads",
+                        required=False,
+                        default=4,
+                        help="Number of threads")
     parser.add_argument(
         "-i",
         "--img_dir",

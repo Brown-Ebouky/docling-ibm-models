@@ -4,27 +4,28 @@
 #
 import logging
 import os
+import sys
 from collections.abc import Iterable
 from typing import Set, Union
 
 import huggingface_hub
 import numpy as np
 import torch
+from detectron2.checkpoint import DetectionCheckpointer
+from detectron2.config import LazyConfig, instantiate
 from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
-
-from detectron2.config import LazyConfig, instantiate
-from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.data.transforms import ResizeShortestEdge
-from PIL import Image
-from detrex.modeling import ema
 from detrex.data import DetrDatasetMapper
-import sys
+from detrex.modeling import ema
+from PIL import Image
 
 _log = logging.getLogger(__name__)
 
+
 class CustomDetRexDatasetMapper(DetrDatasetMapper):
     """Dataset mapper from Detrex - which does not read the image."""
+
     def __call__(self, dataset_dict):
         """
         Parameters
@@ -39,19 +40,23 @@ class CustomDetRexDatasetMapper(DetrDatasetMapper):
         image = dataset_dict["image"]
 
         if self.augmentation_with_crop is None:
-            image, transforms = T.apply_transform_gens(self.augmentation, image)
+            image, transforms = T.apply_transform_gens(self.augmentation,
+                                                       image)
         else:
             if np.random.rand() > 0.5:
-                image, transforms = T.apply_transform_gens(self.augmentation, image)
+                image, transforms = T.apply_transform_gens(
+                    self.augmentation, image)
             else:
-                image, transforms = T.apply_transform_gens(self.augmentation_with_crop, image)
+                image, transforms = T.apply_transform_gens(
+                    self.augmentation_with_crop, image)
 
         image_shape = image.shape[:2]  # h, w
 
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
         # Therefore it's important to use torch.Tensor.
-        dataset_dict["image"] = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
+        dataset_dict["image"] = torch.as_tensor(
+            np.ascontiguousarray(image.transpose(2, 0, 1)))
 
         if not self.is_train:
             # USER: Modify this if you want to keep them for some reason.
@@ -67,13 +72,15 @@ class CustomDetRexDatasetMapper(DetrDatasetMapper):
 
             # USER: Implement additional transformations if you have other types of data
             annos = [
-                utils.transform_instance_annotations(obj, transforms, image_shape)
+                utils.transform_instance_annotations(obj, transforms,
+                                                     image_shape)
                 for obj in dataset_dict.pop("annotations")
                 if obj.get("iscrowd", 0) == 0
             ]
             instances = utils.annotations_to_instances(annos, image_shape)
             dataset_dict["instances"] = utils.filter_empty_instances(instances)
         return dataset_dict
+
 
 class DetRexLayoutPredictor:
     """
@@ -142,14 +149,17 @@ class DetRexLayoutPredictor:
         self._st_fn = huggingface_hub.snapshot_download(artifact_path)
 
         sys.path.insert(0, self._st_fn)
-        
+
         # Load config and instantiate model
-        cfg = LazyConfig.load(os.path.join(self._st_fn, "projects/dino_dinov2/configs/COCO/dino_dinov2_b_12ep.py"))
-        
+        cfg = LazyConfig.load(
+            os.path.join(
+                self._st_fn,
+                "projects/dino_dinov2/configs/COCO/dino_dinov2_b_12ep.py"))
+
         self.model = instantiate(cfg.model)
         self.model.to(device)
-        self.model.training=False
-        
+        self.model.training = False
+
         # image augmentation at test time - follows config
         augmentation = [
             ResizeShortestEdge(
@@ -166,11 +176,11 @@ class DetRexLayoutPredictor:
             img_format="RGB",  # match your config
             mask_on=False,
         )
-        
+
         # load previous checkpoint
-        DetectionCheckpointer(self.model, **ema.may_get_ema_checkpointer(
-            cfg, self.model)).load(os.path.join(self._st_fn, "model_final.pth"))
-        
+        DetectionCheckpointer(
+            self.model, **ema.may_get_ema_checkpointer(cfg, self.model)).load(
+                os.path.join(self._st_fn, "model_final.pth"))
 
         _log.debug("DetRex LayoutPredictor settings: {}".format(self.info()))
 
@@ -187,7 +197,6 @@ class DetRexLayoutPredictor:
         }
         return info
 
-    
     @torch.inference_mode()
     def predict(self, orig_img: Union[Image.Image,
                                       np.ndarray]) -> Iterable[dict]:
@@ -216,24 +225,26 @@ class DetRexLayoutPredictor:
         else:
             raise TypeError("Not supported input image format")
 
-        
         w, h = page_img.size
 
-        batched_page_img = {"image": utils.convert_PIL_to_numpy(page_img, "RGB"),  "height": h, "width": w,}
-        mapped_img = self.data_mapper(batched_page_img) # (batched_page_img)
-        
+        batched_page_img = {
+            "image": utils.convert_PIL_to_numpy(page_img, "RGB"),
+            "height": h,
+            "width": w,
+        }
+        mapped_img = self.data_mapper(batched_page_img)  # (batched_page_img)
+
         results = self.model([mapped_img])
         result = results[0]['instances']
-        
-        
+
         for score, label_id, box in zip(result.scores, result.pred_classes,
                                         result.pred_boxes):
             score = float(score.item())
-            
+
             if score < self._threshold:
                 continue
 
-            label_id = int(label_id.item()) # + 1  # Advance the label_id
+            label_id = int(label_id.item())  # + 1  # Advance the label_id
             label_str = self._classes_map[label_id]
 
             # Filter out blacklisted classes
