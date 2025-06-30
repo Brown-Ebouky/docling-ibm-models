@@ -39,18 +39,7 @@ class CustomDetRexDatasetMapper(DetrDatasetMapper):
         assert "image" in dataset_dict
         image = dataset_dict["image"]
 
-        if self.augmentation_with_crop is None:
-            image, transforms = T.apply_transform_gens(self.augmentation,
-                                                       image)
-        else:
-            if np.random.rand() > 0.5:
-                image, transforms = T.apply_transform_gens(
-                    self.augmentation, image)
-            else:
-                image, transforms = T.apply_transform_gens(
-                    self.augmentation_with_crop, image)
-
-        image_shape = image.shape[:2]  # h, w
+        image, transforms = T.apply_transform_gens(self.augmentation, image)
 
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
@@ -58,27 +47,6 @@ class CustomDetRexDatasetMapper(DetrDatasetMapper):
         dataset_dict["image"] = torch.as_tensor(
             np.ascontiguousarray(image.transpose(2, 0, 1)))
 
-        if not self.is_train:
-            # USER: Modify this if you want to keep them for some reason.
-            dataset_dict.pop("annotations", None)
-            return dataset_dict
-
-        if "annotations" in dataset_dict:
-            # USER: Modify this if you want to keep them for some reason.
-            for anno in dataset_dict["annotations"]:
-                if not self.mask_on:
-                    anno.pop("segmentation", None)
-                anno.pop("keypoints", None)
-
-            # USER: Implement additional transformations if you have other types of data
-            annos = [
-                utils.transform_instance_annotations(obj, transforms,
-                                                     image_shape)
-                for obj in dataset_dict.pop("annotations")
-                if obj.get("iscrowd", 0) == 0
-            ]
-            instances = utils.annotations_to_instances(annos, image_shape)
-            dataset_dict["instances"] = utils.filter_empty_instances(instances)
         return dataset_dict
 
 

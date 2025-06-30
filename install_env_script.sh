@@ -35,5 +35,7 @@ echo "Installing external repos..."
 pip install git+https://github.com/dgcnz/detrex.git
 pip install git+https://github.com/facebookresearch/detectron2.git
 
+echo "Installing current docling-ibm-models repo"
+pip install -e .
 
 echo "Setup complete!"
