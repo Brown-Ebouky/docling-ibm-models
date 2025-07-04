@@ -23,33 +23,6 @@ from PIL import Image
 _log = logging.getLogger(__name__)
 
 
-class CustomDetRexDatasetMapper(DetrDatasetMapper):
-    """Dataset mapper from Detrex - which does not read the image."""
-
-    def __call__(self, dataset_dict):
-        """
-        Parameters
-        ----------    
-        dataset_dict: metadata of one image
-        
-        Returns
-        -------
-        a dict in a format that builtin detectron2 accept
-        """
-        assert "image" in dataset_dict
-        image = dataset_dict["image"]
-
-        image, transforms = T.apply_transform_gens(self.augmentation, image)
-
-        # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
-        # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
-        # Therefore it's important to use torch.Tensor.
-        dataset_dict["image"] = torch.as_tensor(
-            np.ascontiguousarray(image.transpose(2, 0, 1)))
-
-        return dataset_dict
-
-
 class DetRexLayoutPredictor:
     """
     Document layout prediction using safe tensors
@@ -128,23 +101,6 @@ class DetRexLayoutPredictor:
         self.model.to(device)
         self.model.training = False
 
-        # image augmentation at test time - follows config
-        augmentation = [
-            ResizeShortestEdge(
-                short_edge_length=800,
-                max_size=1333,
-            )
-        ]
-
-        # Instantiate the mapper
-        self.data_mapper = CustomDetRexDatasetMapper(
-            is_train=False,
-            augmentation=augmentation,
-            augmentation_with_crop=None,
-            img_format="RGB",  # match your config
-            mask_on=False,
-        )
-
         # load previous checkpoint
         DetectionCheckpointer(
             self.model, **ema.may_get_ema_checkpointer(cfg, self.model)).load(
@@ -200,9 +156,12 @@ class DetRexLayoutPredictor:
             "height": h,
             "width": w,
         }
-        mapped_img = self.data_mapper(batched_page_img)  # (batched_page_img)
+        # mapped_img = self.data_mapper(batched_page_img)  # (batched_page_img)
 
-        results = self.model([mapped_img])
+        batched_page_img["image"] = torch.as_tensor(
+            np.ascontiguousarray(batched_page_img["image"].transpose(2, 0, 1)))
+
+        results = self.model([batched_page_img])  # mapped_img
         result = results[0]['instances']
 
         for score, label_id, box in zip(result.scores, result.pred_classes,

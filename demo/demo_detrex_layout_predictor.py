@@ -82,7 +82,7 @@ def main(args):
     # Ensure the viz dir
     Path(viz_dir).mkdir(parents=True, exist_ok=True)
 
-    artifact_path = "bebouky/deterex-custom-model"  # os.path.join(download_path, "model_artifacts/layout")
+    artifact_path = "bebouky/deterex-custom-model"
 
     # Test the LayoutPredictor
     demo(logger, artifact_path, device, num_threads, img_dir, viz_dir)
@@ -90,7 +90,7 @@ def main(args):
 
 if __name__ == "__main__":
     r"""
-    python -m demo.demo_layout_predictor -i <images_dir>
+    python demo_detrex_layout_predictor.py -i <images_dir>
     """
     parser = argparse.ArgumentParser(description="Test the LayoutPredictor")
     parser.add_argument("-d",
